@@ -28,18 +28,20 @@
     <div id="content-wrapper">
       <div class="inner clearfix">
         <section id="main-content">
-          <p><code>antsASLProcessing.sh</code> performs ASL processing based on ANTs tools.  Preprocessing of T1 images using antsCorticalThickness.sh is assumed.  The following steps are performed: 
-1. Calculation of average pCASL image. 
-2. Skull stripping of average pCASL image. 
-3. Registration of average pCASL image to T1 image. 
-4. (Robust) calculation of mean CBF. 
-5. Warping tissue priors and labels to ASL space.
-6. Warping mean CBF image to template space for VBM analysis.</p>
+          <p><code>antsASLProcessing.sh</code> performs ASL processing based on ANTs tools.  Preprocessing of T1 images using antsCorticalThickness.sh is assumed.  The following steps are performed: </p>
 
-<p>Usage: 
+<ol>
+<li><p>Calculation of average pCASL image. </p></li>
+<li><p>Skull stripping of average pCASL image. </p></li>
+<li><p>Registration of average pCASL image to T1 image. </p></li>
+<li><p>(Robust) calculation of mean CBF. </p></li>
+<li><p>Warping tissue priors and labels to ASL space.</p></li>
+<li><p>Warping mean CBF image to template space for VBM analysis.</p></li>
+</ol><p>Usage: 
 Required arguments: </p>
 
-<div class="highlight highlight-bash"><pre>antsASLProcessing.sh -a anatomical image <span class="o">(</span>skull stripped<span class="o">)</span>  
+<div class="highlight highlight-bash"><pre>antsASLProcessing.sh 
+              -a anatomical image <span class="o">(</span>skull stripped<span class="o">)</span>  
               -p brain segmentation priors <span class="o">(</span>C-style, e.g. priors%d.nii.gz<span class="o">)</span> 
               -x t1 brain mask
               -s raw pCASL image 

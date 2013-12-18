@@ -24,4 +24,4 @@ Optional arguments:
 	      -r robustness parameter (defaults to 0.95)             
 	      -h print help and exit
 ```
-For an example usage, see `process.sh`. 
+For an example usage, see `process.sh`.  Data can be downloaded from https://dl.dropboxusercontent.com/u/25867023/asl_data.tgz. 

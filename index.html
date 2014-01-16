@@ -28,7 +28,7 @@
     <div id="content-wrapper">
       <div class="inner clearfix">
         <section id="main-content">
-          <p><code>antsASLProcessing.sh</code> performs ASL processing based on ANTs tools.  Preprocessing of T1 images using antsCorticalThickness.sh is assumed.  The following steps are performed: </p>
+          <p><code>antsASLProcessing.sh</code> performs ASL processing based on ANTs tools.  Preprocessing of T1 images using <code>antsCorticalThickness.sh</code> is assumed.  The following steps are performed: </p>
 
 <ol>
 <li><p>Calculation of average pCASL image. </p></li>
@@ -40,23 +40,27 @@
 </ol><p>Usage: 
 Required arguments: </p>
 
-<div class="highlight highlight-bash"><pre>antsASLProcessing.sh 
-              -a anatomical image <span class="o">(</span>skull stripped<span class="o">)</span>  
-              -p brain segmentation priors <span class="o">(</span>C-style, e.g. priors%d.nii.gz<span class="o">)</span> 
+<pre><code>antsASLProcessing.sh
+              -a anatomical image (skull stripped)  
+              -p brain segmentation priors (C-style, e.g. priors%d.nii.gz) 
+              -g hard brain segmentation
               -x t1 brain mask
               -s raw pCASL image 
               -e brain template
           -l template labels
               -t skull-stripped t1 to template transform prefix 
               -o output prefix
-</pre></div>
+</code></pre>
 
 <p>Optional arguments: </p>
 
-<div class="highlight highlight-bash"><pre>              -b blood T1 value <span class="o">(</span>defaults to 0.67 s^-1<span class="o">)</span> 
-          -r robustness parameter <span class="o">(</span>defaults to 0.95<span class="o">)</span>             
-          -h print <span class="nb">help </span>and <span class="nb">exit</span>
-</pre></div>
+<pre><code>              -b blood T1 value (defaults to 0.67 s^-1) 
+          -r robustness parameter (defaults to 0.95)             
+          -n number of bootstrap samples (defaults to 20)
+          -c percent to sample per bootstrap run (defaults to 70)
+          -k keep tmp files, including warps (defaults to false--takes lots of space to save)
+          -h print help and exit
+</code></pre>
 
 <p>For an example usage, see <code>process.sh</code>.  Data can be downloaded from <a href="https://dl.dropboxusercontent.com/u/25867023/asl_data.tgz">https://dl.dropboxusercontent.com/u/25867023/asl_data.tgz</a>. </p>
         </section>

@@ -1,4 +1,4 @@
-`antsASLProcessing.sh` performs ASL processing based on ANTs tools.  Preprocessing of T1 images using antsCorticalThickness.sh is assumed.  The following steps are performed: 
+`antsASLProcessing.sh` performs ASL processing based on ANTs tools.  Preprocessing of T1 images using `antsCorticalThickness.sh` is assumed.  The following steps are performed: 
 
 1. Calculation of average pCASL image. 
 
@@ -14,10 +14,11 @@
 
 Usage: 
 Required arguments: 
-```bash 
-antsASLProcessing.sh 
+```
+antsASLProcessing.sh
               -a anatomical image (skull stripped)  
               -p brain segmentation priors (C-style, e.g. priors%d.nii.gz) 
+              -g hard brain segmentation
               -x t1 brain mask
               -s raw pCASL image 
               -e brain template
@@ -26,9 +27,12 @@ antsASLProcessing.sh
               -o output prefix
 ```
 Optional arguments: 
-```bash
+```
               -b blood T1 value (defaults to 0.67 s^-1) 
 	      -r robustness parameter (defaults to 0.95)             
+	      -n number of bootstrap samples (defaults to 20)
+	      -c percent to sample per bootstrap run (defaults to 70)
+	      -k keep tmp files, including warps (defaults to false--takes lots of space to save)
 	      -h print help and exit
 ```
 For an example usage, see `process.sh`.  Data can be downloaded from https://dl.dropboxusercontent.com/u/25867023/asl_data.tgz. 

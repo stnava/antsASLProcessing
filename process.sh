@@ -2,6 +2,7 @@
 antsASLProcessing.sh \
   -a imgs/t1_cerebrum.nii.gz \
   -p imgs/posteriors%d.nii.gz \
+  -g imgs/t1_seg.nii.gz \
   -x imgs/t1_mask.nii.gz \
   -s imgs/pcasl.nii.gz \
   -e template/template.nii.gz \

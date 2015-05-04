@@ -1,0 +1,135 @@
+---
+title: "Arterial Spin Labeling Processing with ANTsR"
+author: "Benjamin M. Kandel"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+Arterial spin labeling (ASL) is a functional MRI technique that can quantitatively measure brain perfusion without using a radioactive tracer.  ASL works by inverting, or ``tagging'', the spin in the blood traveling into the brain.  By subtracting the observed signal when inverting the inflowing blood from the uninverted, natural-state blood, it is possible to obtain an estimate of how much of the MR signal inside the brain is due to inflowing blood. Perfusion changes due to both acute and chronic causes, and quantifying perfusion can lead to insights into neural functioning and biomarkers for tracking diseases.
+
+One of the main issues in ASL signal processing is the very low signal-to-noise ratio (SNR) of the images.  Typically, the SNR is on the order of 1%.  To counteract the low SNR, most ASL acquisitions take many tag-control acquisitions, averaging the observed differences and relying on the Law of Large Numbers to obtain an accurate estimate of the mean tag-control difference. 
+
+Because of the low SNR of ASL data, simple averaging of the tag-control difference may be confounded by significant noise and outliers. These outliers may be caused by motion artifacts, random fluctuations in the signal due to low SNR, machine drift, and other undetermined causes.  `R` provides easy access to advanced statistical techniques for dealing with these issues, and as such ASL processing is an ideal test case to highlight what can be achieved by integrating the sophisticated image processing tools from `ANTs`  with the strong statistical libraries available in `R`. 
+
+
+## Overview of Processing
+Raw ASL studies consist of a sequence of interleaved "tag" and "control" images.  Calculating brain perfusion from these tag and control images consists of three main steps: 
+
+1. Motion correction
+2. Noise reduction (optional).  This involves two steps: 
+ + Minimization of machine drift and physiological noise 
+ + Rejection of outlier volumes
+3. Calculating average difference between tag and control images
+
+ANTsR provides a comprehensive suite of tools for ASL processing and denoising.  To demonstrate the effect of the tools on observed perfusion estimates, we will show the processing in a step-by-step manner.
+
+## Step 1: Motion correction
+```{r, echo=FALSE}
+#setup 
+if (!file.exists('data/101_pcasl.nii.gz')){
+  download.file('http://files.figshare.com/2049814/pcasl_data.tar.gz', 'data.tar.gz')
+  untar('data.tar.gz')
+  file.remove('data.tar.gz')
+}
+```
+
+```{r, fig.show='hold'}
+library(ANTsR)
+library(ggplot2)
+library(RColorBrewer)
+library(grid)
+pcasl <- antsImageRead(getANTsRData('pcasl'))
+moco <- antsMotionCalculation(pcasl)
+tsdat <- timeseries2matrix(moco$moco_img, moco$moco_mask)
+``` 
+
+```{r, echo=FALSE}
+fte_theme <- function() {
+
+  # Generate the colors for the chart procedurally with RColorBrewer
+  palette <- brewer.pal("Greys", n=9)
+  color.background = palette[2]
+  color.grid.major = palette[3]
+  color.axis.text = palette[6]
+  color.axis.title = palette[7]
+  color.title = palette[9]
+
+  # Begin construction of chart
+  theme_bw(base_size=9) +
+
+  # Set the entire chart region to a light gray color
+  theme(panel.background=element_rect(fill=color.background, color=color.background)) +
+  theme(plot.background=element_rect(fill=color.background, color=color.background)) +
+  theme(panel.border=element_rect(color=color.background)) +
+
+  # Format the grid
+  theme(panel.grid.major=element_line(color=color.grid.major,size=.25)) +
+  theme(panel.grid.minor=element_blank()) +
+  theme(axis.ticks=element_blank()) +
+
+  # Format the legend, but hide by default
+  theme(legend.position="none") +
+  theme(legend.background = element_rect(fill=color.background)) +
+  theme(legend.text = element_text(size=7,color=color.axis.title)) +
+
+  # Set title and axis labels, and format these and tick marks
+  theme(plot.title=element_text(color=color.title, size=10, vjust=1.25)) +
+  theme(axis.text.x=element_text(size=7,color=color.axis.text)) +
+  theme(axis.text.y=element_text(size=7,color=color.axis.text)) +
+  theme(axis.title.x=element_text(size=8,color=color.axis.title, vjust=0)) +
+  theme(axis.title.y=element_text(size=8,color=color.axis.title, vjust=1.25)) +
+
+  # Plot margins
+  theme(plot.margin = unit(c(0.35, 0.2, 0.3, 0.35), "cm"))
+}
+```
+
+Now, we can plot the mean time series for the whole brain: 
+```{r}
+tpoints <- data.frame(Image=1:nrow(tsdat), Value=rowMeans(tsdat))
+ggplot(tpoints, aes(Image, Value)) + geom_line() + fte_theme()
+```
+
+We compare this to the time series for only the gray matter: 
+```{r}
+seg <- antsImageRead(getANTsRData('pcaslseg'))
+gm <- thresholdImage(seg, 2, 2) + thresholdImage(seg, 4, 4)
+gmdat <- timeseries2matrix(moco$moco_img, gm)
+gmpoints <- data.frame(Volume=1:nrow(gmdat), Value=rowMeans(gmdat))
+ggplot(gmpoints, aes(Volume, Value)) + geom_line() + fte_theme()
+```
+
+And compare to that of the white matter: 
+```{r}
+wm <- thresholdImage(seg, 3, 3)
+wmdat <- timeseries2matrix(moco$moco_img, wm)
+wmpoints <- data.frame(Volume=1:nrow(wmdat), Value=rowMeans(wmdat))
+ggplot(wmpoints, aes(Volume, Value)) + geom_line() + fte_theme()
+```
+
+Although it is clear that as a whole, there is strong signal in the gray matter, the noise in individual voxels can outweigh the signal.  As an example, here are timeseries plots for a few randomly chosen points in the gray matter: 
+```{r}
+nvox <- 4
+myvox <- sample(ncol(gmdat), nvox)
+df.samp <- data.frame(matrix(rep(NA, nvox*nrow(gmdat)), nrow=nvox))
+rownames(df.samp) <- paste('Voxel', 1:nvox)
+#colnames(df.samp) <- paste('Volume', 1:nrow(gmdat))
+df.samp <- rbind(df.samp, 1:nrow(gmdat))
+rownames(df.samp)[nrow(df.samp)] <- 'Volume'
+df.samp <- t(df.samp)
+df.samp <- NULL
+for (ii in 1:length(myvox)){
+  df.samp <- rbind(df.samp, data.frame(
+    Voxel=as.factor(rep(ii, nrow(gmdat))), Value=gmdat[, myvox[ii]], Volume=1:nrow(gmdat)))
+}
+ggplot(df.samp, aes(x=Volume, y=Value, colour=Voxel, group=Voxel)) + 
+  geom_point() + geom_line()
+```
+
+Clearly, the noise patterns are not homogeneous throughout the gray matter, and have significant impact on the observed values.  
+
+

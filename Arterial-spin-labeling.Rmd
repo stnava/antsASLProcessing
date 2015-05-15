@@ -28,16 +28,18 @@ Raw ASL studies consist of a sequence of interleaved "tag" and "control" images.
 ANTsR provides a comprehensive suite of tools for ASL processing and denoising.  To demonstrate the effect of the tools on observed perfusion estimates, we will show the processing in a step-by-step manner.
 
 ```{r, echo=FALSE}
+library(knitr)
 #setup
 if (!file.exists('data/101_pcasl.nii.gz')){
   download.file('http://files.figshare.com/2049814/pcasl_data.tar.gz', 'data.tar.gz')
   untar('data.tar.gz')
   file.remove('data.tar.gz')
 }
+opts_chunk$set(dev = 'pdf')
 ```
 
 ## Step 1: Motion correction
-```{r, fig.show='hold'}
+```{r, fig.show='hold', fig.width=4}
 library(ANTsR)
 library(ggplot2)
 library(RColorBrewer)
@@ -82,13 +84,16 @@ physiological drift is not removed from the calculation of perfusion, the
 effect of tagging blood will be conflated with the drift, leading to a decrease
 in accuracy of perfusion calculation.
 
-To enable segmentation of the ASL images, we must register the ASL image to the T1 structural image.
+To enable segmentation of the ASL images, we must register the ASL image to the T1 structural image.  First, we show a view of the images to get a sense of the sort of data we're dealing with. 
 ```{r}
 t1 <- antsImageRead('data/101_t1.nii.gz')
 avg.asl <- getAverageOfTimeSeries(pcasl)
+plot(t1)
+plot(avg.asl)
 reg <- antsRegistration(avg.asl, t1, 'SyNBold')
 seg.t1 <- antsImageRead('data/101_seg.nii.gz')
-seg.asl <- antsApplyTransforms(avg.asl, seg.t1, reg$fwdtransforms, interpolator='MultiLabel')
+seg.asl <- antsApplyTransforms(
+  avg.asl, seg.t1, reg$fwdtransforms, interpolator='MultiLabel')
 probs <- list()
 for(ii in 1:length(probs.t1)){
   probs[[ii]] <- antsApplyTransforms(avg.asl, probs.t1[[ii]], reg$fwdtransforms)
@@ -119,6 +124,22 @@ ggplot(df.samp, aes(x=Volume, y=Value, colour=Voxel, group=Voxel)) +
   geom_point() + geom_line()
 ```
 
-Clearly, the noise patterns are not homogeneous throughout the gray matter, and have significant impact on the observed values.
+Clearly, the noise patterns are not homogeneous throughout the gray matter, and have significant impact on the observed values.  To account for this, we need a way to account for noise in the data. 
 
+## Noise Correction
+Noise calculation is inherently an uncertain enterprise.  Establishing what constitutes noise and what constitutes signal is difficult in most circumstances, and is even more so in the case of ASL where there is no established ground truth to predict. A popular method for noise reduction in BOLD (Blood Oxygen Level Dependent) fMRI imaging is known as ``CompCor.'' CompCor finds the region in the image with the greatest amount of temporal variance and assumes that the temporal signal in that region corresponds to the noise signal in the rest of the brain.  When it comes to ASL, however, the assumption that regions with high temporal variance are primarily noise-driven may not hold.  Because the signal in ASL is itself the sawtooth pattern of the tag-control pairs, a region with high temporal variance may actually be a region with good signal-to-noise ratio.  Therefore, to establish noise patterns, we instead aim to uncover regions with unstable relationships between the observed time-series and the tag-control pattern.  Using a cross-validation scheme, we train a model predicting the tag-control pattern from a subsection the ASL time-series and observe how well this model holds up when predicting the tag-control pattern using the rest of the time-series.  Regions of the brain with low cross-validation values are assumed to represent noisy regions in the image.  We show an example calculation of a cross-validated assessment of signal stability below.  
 
+```{r}
+tc <- (rep(c(0, 1), dim(tsdat)[1])[1:dim(tsdat)[1]] - 0.5) # tag-control sawtooth 
+nuisance <- getASLNoisePredictors(tsdat, tc, polydegree='loess')
+nuis.samp <- scale(nuisance[, 1])
+tc.scale <- scale(tc)
+df.nuis <- data.frame(
+  Signal=c(rep('Nuisance', length(nuis.samp)), rep('TagControl', length(nuis.samp))),
+  Value=c(nuis.samp, tc.scale), 
+  Timepoint=rep(1:length(nuis.samp), 2))
+ggplot(df.nuis, aes(x=Timepoint, y=Value, colour=Signal)) + 
+  geom_point() +  geom_line()
+```
+
+Clearly, there is little correlation between the tag-control pattern and the nuisance time-series signal.  In addition, the nuisance signal is separate from the overall drift signal.  The overall drift is encoded in the `polydegree` argument; here, we use a LOESS kernel regression spline to fit the overall time-series drift.

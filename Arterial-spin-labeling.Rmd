@@ -206,5 +206,5 @@ m0<-n3BiasFieldCorrection(m0,4)
 m0<-n3BiasFieldCorrection(m0,2)
 parameters = list(sequence="pcasl", m0=antsImageClone(m0))
 cbf <- quantifyCBF(perf, mask=moco$moco_mask, parameters=parameters)
-plot(cbf)
+plot(cbf$meancbf,axis=3)
 ```

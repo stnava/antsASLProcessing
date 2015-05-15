@@ -187,8 +187,8 @@ $$
 where $f$ is the perfusion in physiological units (mL/100g/min); $\lambda$ is the blood-tissue water partition coefficient (0.9 g/mL); $\Delta M$ is the mean difference between control and tagged images; $\alpha$ is the tagging efficiency (0.85); $M_0$ is the equilibrium brain tissue magnetization, approximated by the mean of the control (non-tagged) images; $T_{1b}$ is the blood T1 value, modified for each subject based on gender and age, as below; $w$ is the postlabeling delay (1 second); and $\tau$ is labeling duration (1.5 seconds).  We calculate the M0 image by averaging the control images: 
 
 ```{r}
-mvals2 <- apply(ts[tc == 0.5, ], 2, mean)
-mvals1 <- apply(ts[tc == -0.5, ], 2, mean)
+mvals2 <- apply(tsdat[tc == 0.5, ], 2, mean)
+mvals1 <- apply(tsdat[tc == -0.5, ], 2, mean)
 # mean control should exceed mean tag
 if (mean(mvals2) > mean(mvals1)) {
   m0vals<-mvals2

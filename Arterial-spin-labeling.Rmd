@@ -1,12 +1,11 @@
 ---
 title: "Arterial Spin Labeling Processing with ANTsR"
-author: "Benjamin M. Kandel"
-date: "`r Sys.Date()`"
-output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Vignette Title}
-  %\VignetteEngine{knitr::rmarkdown}
-  \usepackage[utf8]{inputenc}
+author: "Benjamin M. Kandel and Brian B. Avants"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  prettydoc::html_pretty:
+    theme: hpstr
+    highlight: github
 ---
 
 Arterial spin labeling (ASL) is a functional MRI technique that can quantitatively measure brain perfusion without using a radioactive tracer.  ASL works by inverting, or ``tagging'', the spin in the blood traveling into the brain.  By subtracting the observed signal when inverting the inflowing blood from the uninverted, natural-state blood, it is possible to obtain an estimate of how much of the MR signal inside the brain is due to inflowing blood. Perfusion changes due to both acute and chronic causes, and quantifying perfusion can lead to insights into neural functioning and biomarkers for tracking diseases.
@@ -35,11 +34,10 @@ if (!file.exists('data/101_pcasl.nii.gz')){
   untar('data.tar.gz')
   file.remove('data.tar.gz')
 }
-opts_chunk$set(dev = 'pdf')
 ```
 
 ## Step 1: Motion correction
-```{r, fig.show='hold', fig.width=4}
+```{r}
 library(ANTsR)
 library(ggplot2)
 library(RColorBrewer)
@@ -170,15 +168,17 @@ We provide two methods for rejection of outlier images.  The first is the outlie
 
 ```{r}
 censored <- aslCensoring(pcasl, moco$moco_mask, nuis=noise.combined, method='robust')
+pcasl.censored = splitNDImageToList( pcasl )[ -censored$which.outliers ]
+pcasl.censored = mergeListToNDImage( pcasl, pcasl.censored )
 noise.censored <- noise.combined[-censored$which.outliers, ]
-tc <- tc[-censored$which.outliers]
+tc.censored <- tc[-censored$which.outliers]
 ```
 
 Once we have the nuisance-corrected and cleaned ASL time-series, we are ready to calculate the average tag-control difference.  This has traditionally been done by simply averaging the tag-control differences.  A drawback to this method is that it does not allow for incorporation of nuisance variables, as a regression typically would.  Therefore, we will use a regression-based approach to estimate the effect of tagging on the image values.  
 
 ```{r}
-perf <- aslAveraging(censored$asl.inlier, mask=moco$moco_mask,
-    tc=tc, nuisance=noise.censored, method='regression')
+perf <- aslAveraging( pcasl.censored, mask=moco$moco_mask,
+    tc=tc.censored, nuisance=noise.censored, method='regression')
 ```
 Finally, we convert the perfusion image into a quantitative blood flow image.  To calculate the blood flow image, we must first calculate the blood flow.  Blood flow is calculated as: 
 $$
@@ -208,3 +208,56 @@ parameters = list(sequence="pcasl", m0=antsImageClone(m0))
 cbf <- quantifyCBF(perf, mask=moco$moco_mask, parameters=parameters)
 plot(cbf$meancbf,axis=3)
 ```
+
+
+We computed the CBF - but how does this subject's measurements relate to those of other subjects?
+
+Let us compare to *normative data* from the pediatric template of brain perfusion paper.
+
+```{r normative}
+myfn = tempfile( fileext = '.csv' )
+download.file("https://ndownloader.figshare.com/files/1699436", myfn )
+normdf = read.csv( myfn )
+hist( normdf$CBFMeanFrontal_Inf_Orb_L  )
+```
+
+
+The PTBP paper used `aal` data.
+
+```{r aalMap}
+templateAAL = antsImageRead( path.expand( "~/data/antsExamples/NeuroBattery/data/template/PTBP/Labels/PTBP_T1_AAL.nii.gz" ) )
+templateBrain = antsImageRead( path.expand( "~/data/antsExamples/NeuroBattery/data/template/PTBP/PTBP_T1_BrainCerebellum.nii.gz" ) )
+subjectBrain = t1 * thresholdImage( seg.t1, 1, Inf )
+quickReg = antsRegistration( subjectBrain,   templateBrain, 'Affine'  )
+aal2pcasl = antsApplyTransforms( cbf$meancbf, templateAAL, 
+  c( reg$fwdtransforms, quickReg$fwdtransforms ),
+  interpolator = 'genericLabel' )
+```
+
+
+Now we can quantify the CBF in each region.
+
+```{r aalQuant}
+data( 'aal' )
+aslaalmask = thresholdImage( seg.asl, 2, 2 )
+labmat = labels2matrix( aal2pcasl, aslaalmask, 
+                        targetLabels =  aal$label_num, missingVal = 0 )
+dim( labmat )
+cbfvec = cbf$meancbf[ aslaalmask ]
+length( cbfvec )
+# now compute summary measurements
+subjectSumCBF = labmat %*% cbfvec
+labmatMean = labmat / rowSums(  labmat  )
+subjectMeanCBF = labmatMean %*% cbfvec
+subjectSummaryCBF = data.frame( anatomy = aal$label_name, meanCBF =  subjectMeanCBF )
+angCBF = subjectSummaryCBF$meanCBF[ subjectSummaryCBF$anatomy == "Angular_R" ]
+print( 
+  t.test( angCBF -   
+               normdf$CBFMeanAngular_R )  )
+ggplot( normdf, aes( CBFMeanAngular_R, fill='red' )) + geom_density(alpha = 0.2) + 
+  ggtitle( "CBF Values for this subject in angular gyrus relative to population" ) + 
+    geom_vline(  aes(xintercept = angCBF  ) )
+```
+
+
+Exercise: We can do something similar for volumetric data.

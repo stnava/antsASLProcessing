@@ -82,7 +82,7 @@ physiological drift is not removed from the calculation of perfusion, the
 effect of tagging blood will be conflated with the drift, leading to a decrease
 in accuracy of perfusion calculation.
 
-To enable segmentation of the ASL images, we must register the ASL image to the T1 structural image.  First, we show a view of the images to get a sense of the sort of data we're dealing with. 
+To enable segmentation of the ASL images, we must register the ASL image to the T1 structural image.  First, we show a view of the images to get a sense of the sort of data we're dealing with.
 ```{r}
 t1 <- antsImageRead('data/101_t1.nii.gz')
 avg.asl <- getAverageOfTimeSeries(pcasl)
@@ -122,21 +122,21 @@ ggplot(df.samp, aes(x=Volume, y=Value, colour=Voxel, group=Voxel)) +
   geom_point() + geom_line()
 ```
 
-Clearly, the noise patterns are not homogeneous throughout the gray matter, and have significant impact on the observed values.  To account for this, we need a way to account for noise in the data. 
+Clearly, the noise patterns are not homogeneous throughout the gray matter, and have significant impact on the observed values.  To account for this, we need a way to account for noise in the data.
 
 ## Noise Correction
 Noise calculation is inherently an uncertain enterprise.  Establishing what constitutes noise and what constitutes signal is difficult in most circumstances, and is even more so in the case of ASL where there is no established ground truth to predict. A popular method for noise reduction in BOLD (Blood Oxygen Level Dependent) fMRI imaging is known as ``CompCor.'' CompCor finds the region in the image with the greatest amount of temporal variance and assumes that the temporal signal in that region corresponds to the noise signal in the rest of the brain.  When it comes to ASL, however, the assumption that regions with high temporal variance are primarily noise-driven may not hold.  Because the signal in ASL is itself the sawtooth pattern of the tag-control pairs, a region with high temporal variance may actually be a region with good signal-to-noise ratio.  Therefore, to establish noise patterns, we instead aim to uncover regions with unstable relationships between the observed time-series and the tag-control pattern.  Using a cross-validation scheme, we train a model predicting the tag-control pattern from a subsection the ASL time-series and observe how well this model holds up when predicting the tag-control pattern using the rest of the time-series.  Regions of the brain with low cross-validation values are assumed to represent noisy regions in the image.  We show an example calculation of a cross-validated assessment of signal stability below.  
 
 ```{r}
-tc <- (rep(c(0, 1), dim(tsdat)[1])[1:dim(tsdat)[1]] - 0.5) # tag-control sawtooth 
+tc <- (rep(c(0, 1), dim(tsdat)[1])[1:dim(tsdat)[1]] - 0.5) # tag-control sawtooth
 nuisance <- getASLNoisePredictors(tsdat, tc, polydegree='loess')
 nuis.samp <- scale(nuisance[, 1])
 tc.scale <- scale(tc)
 df.nuis <- data.frame(
   Signal=c(rep('Nuisance', length(nuis.samp)), rep('TagControl', length(nuis.samp))),
-  Value=c(nuis.samp, tc.scale), 
+  Value=c(nuis.samp, tc.scale),
   Timepoint=rep(1:length(nuis.samp), 2))
-ggplot(df.nuis, aes(x=Timepoint, y=Value, colour=Signal)) + 
+ggplot(df.nuis, aes(x=Timepoint, y=Value, colour=Signal)) +
   geom_point() +  geom_line()
 ```
 
@@ -150,16 +150,16 @@ noise.combined <- as.matrix(
   combineNuisancePredictors(tsdat, tc, noise.all, method='cv'))
 ```
 
-## Outlier Rejection 
-In addition to nuisance trends that are present across the entire brain and time-series, some volumes or tag-control pairs are usually so far outside the normal range that they can interfere with the time-series averaging for the whole brain. 
+## Outlier Rejection
+In addition to nuisance trends that are present across the entire brain and time-series, some volumes or tag-control pairs are usually so far outside the normal range that they can interfere with the time-series averaging for the whole brain.
 
 ```{r}
 ts.mean <- rowMeans(tsdat)
 ts.diff <- diff(ts.mean)
 diff.evens <- ts.diff[seq(1, length(ts.diff), by=2)]
 diff.odds <- ts.diff[seq(2, length(ts.diff), by=2)]
-df.diff <- data.frame(Differences=c(diff.evens, diff.odds), 
-                      Direction=c(rep('Control - tag', length(diff.evens)), 
+df.diff <- data.frame(Differences=c(diff.evens, diff.odds),
+                      Direction=c(rep('Control - tag', length(diff.evens)),
                                   rep('Tag - control', length(diff.odds))))
 ggplot(df.diff, aes(Direction, Differences)) + geom_jitter()
 ```
@@ -180,11 +180,11 @@ Once we have the nuisance-corrected and cleaned ASL time-series, we are ready to
 perf <- aslAveraging( pcasl.censored, mask=moco$moco_mask,
     tc=tc.censored, nuisance=noise.censored, method='regression')
 ```
-Finally, we convert the perfusion image into a quantitative blood flow image.  To calculate the blood flow image, we must first calculate the blood flow.  Blood flow is calculated as: 
+Finally, we convert the perfusion image into a quantitative blood flow image.  To calculate the blood flow image, we must first calculate the blood flow.  Blood flow is calculated as:
 $$
 f = \frac{\lambda \cdot \Delta M}{2 \alpha \cdot M_0 \cdot T_{1b} \cdot \left( e^{-w/T_{1b}} - e^{-(\tau +w)/T_{1b}}\right)},
 $$
-where $f$ is the perfusion in physiological units (mL/100g/min); $\lambda$ is the blood-tissue water partition coefficient (0.9 g/mL); $\Delta M$ is the mean difference between control and tagged images; $\alpha$ is the tagging efficiency (0.85); $M_0$ is the equilibrium brain tissue magnetization, approximated by the mean of the control (non-tagged) images; $T_{1b}$ is the blood T1 value, modified for each subject based on gender and age, as below; $w$ is the postlabeling delay (1 second); and $\tau$ is labeling duration (1.5 seconds).  We calculate the M0 image by averaging the control images: 
+where $f$ is the perfusion in physiological units (mL/100g/min); $\lambda$ is the blood-tissue water partition coefficient (0.9 g/mL); $\Delta M$ is the mean difference between control and tagged images; $\alpha$ is the tagging efficiency (0.85); $M_0$ is the equilibrium brain tissue magnetization, approximated by the mean of the control (non-tagged) images; $T_{1b}$ is the blood T1 value, modified for each subject based on gender and age, as below; $w$ is the postlabeling delay (1 second); and $\tau$ is labeling duration (1.5 seconds).  We calculate the M0 image by averaging the control images:
 
 ```{r}
 mvals2 <- apply(tsdat[tc == 0.5, ], 2, mean)
@@ -225,11 +225,11 @@ hist( normdf$CBFMeanFrontal_Inf_Orb_L  )
 The PTBP paper used `aal` data.
 
 ```{r aalMap}
-templateAAL = antsImageRead( path.expand( "~/data/antsExamples/NeuroBattery/data/template/PTBP/Labels/PTBP_T1_AAL.nii.gz" ) )
-templateBrain = antsImageRead( path.expand( "~/data/antsExamples/NeuroBattery/data/template/PTBP/PTBP_T1_BrainCerebellum.nii.gz" ) )
+templateAAL = antsImageRead( path.expand( "./template/PTBP_T1_AAL.nii.gz" ) )
+templateBrain = antsImageRead( path.expand( "./template/PTBP_T1_BrainCerebellum.nii.gz" ) )
 subjectBrain = t1 * thresholdImage( seg.t1, 1, Inf )
 quickReg = antsRegistration( subjectBrain,   templateBrain, 'Affine'  )
-aal2pcasl = antsApplyTransforms( cbf$meancbf, templateAAL, 
+aal2pcasl = antsApplyTransforms( cbf$meancbf, templateAAL,
   c( reg$fwdtransforms, quickReg$fwdtransforms ),
   interpolator = 'genericLabel' )
 ```
@@ -240,7 +240,7 @@ Now we can quantify the CBF in each region.
 ```{r aalQuant}
 data( 'aal' )
 aslaalmask = thresholdImage( seg.asl, 2, 2 )
-labmat = labels2matrix( aal2pcasl, aslaalmask, 
+labmat = labels2matrix( aal2pcasl, aslaalmask,
                         targetLabels =  aal$label_num, missingVal = 0 )
 dim( labmat )
 cbfvec = cbf$meancbf[ aslaalmask ]
@@ -251,11 +251,11 @@ labmatMean = labmat / rowSums(  labmat  )
 subjectMeanCBF = labmatMean %*% cbfvec
 subjectSummaryCBF = data.frame( anatomy = aal$label_name, meanCBF =  subjectMeanCBF )
 angCBF = subjectSummaryCBF$meanCBF[ subjectSummaryCBF$anatomy == "Angular_R" ]
-print( 
+print(
   t.test( angCBF -   
                normdf$CBFMeanAngular_R )  )
-ggplot( normdf, aes( CBFMeanAngular_R, fill='red' )) + geom_density(alpha = 0.2) + 
-  ggtitle( "CBF Values for this subject in angular gyrus relative to population" ) + 
+ggplot( normdf, aes( CBFMeanAngular_R, fill='red' )) + geom_density(alpha = 0.2) +
+  ggtitle( "CBF Values for this subject in angular gyrus relative to population" ) +
     geom_vline(  aes(xintercept = angCBF  ) )
 ```
 
